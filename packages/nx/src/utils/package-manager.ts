@@ -115,6 +115,7 @@ export function getPackageManagerCommand(
         getRegistryUrl: useBerry
           ? 'yarn config get npmRegistryServer'
           : 'yarn config get registry',
+        runUninstalledPackage: `npx --yes`,
       };
     },
     pnpm: () => {
@@ -148,6 +149,7 @@ export function getPackageManagerCommand(
           }`,
         list: 'pnpm ls --depth 100',
         getRegistryUrl: 'pnpm config get registry',
+        runUninstalledPackage: 'pnpm dlx',
       };
     },
     npm: () => {
@@ -167,6 +169,7 @@ export function getPackageManagerCommand(
           `npm run ${script}${args ? ' -- ' + args : ''}`,
         list: 'npm ls',
         getRegistryUrl: 'npm config get registry',
+        runUninstalledPackage: 'npx --yes',
       };
     },
     bun: () => {
@@ -182,6 +185,7 @@ export function getPackageManagerCommand(
         dlx: 'bunx',
         run: (script: string, args: string) => `bun run ${script} -- ${args}`,
         list: 'bun pm ls',
+        runUninstalledPackage: `bunx --yes`,
       };
     },
   };
