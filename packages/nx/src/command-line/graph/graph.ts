@@ -560,7 +560,7 @@ async function startServer(
   }
 
   if (watchForChanges && daemonClient.enabled()) {
-    unregisterFileWatcher = await createFileWatcher();
+    // unregisterFileWatcher = await createFileWatcher();
   }
 
   const { projectGraphClientResponse, sourceMapResponse } =

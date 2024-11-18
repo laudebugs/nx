@@ -181,66 +181,13 @@
     }
   },
   "plugins": [
-    "@monodon/rust",
-    {
-      "plugin": "@nx/playwright/plugin",
-      "options": {
-        "targetName": "pw-e2e",
-        "ciTargetName": "e2e-ci"
-      }
-    },
     {
       "plugin": "@nx/eslint/plugin",
       "exclude": ["packages/**/__fixtures__/**/*"],
       "options": {
         "targetName": "lint"
       }
-    },
-    {
-      "plugin": "@nx/jest/plugin",
-      "exclude": [
-        "e2e/**/*",
-        "packages/**/__fixtures__/**/*",
-        "jest.config.ts"
-      ],
-      "options": {
-        "targetName": "test"
-      }
-    },
-    {
-      "plugin": "@nx/webpack/plugin",
-      "options": {
-        "serveTargetName": "serve-base",
-        "buildTargetName": "build-client"
-      }
-    },
-    {
-      "plugin": "@nx/jest/plugin",
-      "include": ["e2e/**/*"],
-      "exclude": ["e2e/detox/**/*", "e2e/react-native/**/*", "e2e/expo/**/*"],
-      "options": {
-        "targetName": "e2e-local",
-        "ciTargetName": "e2e-ci"
-      }
-    },
-    {
-      "plugin": "@nx/jest/plugin",
-      "include": ["e2e/detox/**/*", "e2e/react-native/**/*", "e2e/expo/**/*"],
-      "options": {
-        "targetName": "e2e-macos-local",
-        "ciTargetName": "e2e-macos-ci"
-      }
-    },
-    {
-      "plugin": "@nx/next/plugin",
-      "options": {
-        "startTargetName": "next:start",
-        "buildTargetName": "next:build",
-        "devTargetName": "dev",
-        "serveStaticTargetName": "serve-static"
-      }
-    },
-    "@nx/powerpack-enterprise-cloud"
+    }
   ],
   "nxCloudId": "62d013ea0852fe0a2df74438",
   "nxCloudUrl": "https://staging.nx.app",

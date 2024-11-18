@@ -67,8 +67,6 @@ const knownExecutors = {
   test: new Set(['@angular-devkit/build-angular:karma']),
 };
 
-const pmc = getPackageManagerCommand();
-
 function readProjectsCache(cachePath: string): Record<string, AngularProjects> {
   return existsSync(cachePath) ? readJsonFile(cachePath) : {};
 }
@@ -144,6 +142,7 @@ async function buildAngularProjects(
 ): Promise<AngularProjects> {
   const projects: Record<string, AngularProjects[string] & { root: string }> =
     {};
+  const pmc = getPackageManagerCommand();
 
   const absoluteConfigFilePath = join(context.workspaceRoot, configFilePath);
   const angularJson = readJsonFile<AngularJson>(absoluteConfigFilePath);

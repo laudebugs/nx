@@ -9,7 +9,11 @@ import { PluginConfiguration } from '../../../config/nx-json';
 
 import { LoadedNxPlugin } from '../internal-api';
 import { getPluginOsSocketPath } from '../../../daemon/socket-utils';
-import { consumeMessagesFromSocket } from '../../../utils/consume-messages-from-socket';
+import {
+  consumeMessagesFromSocket,
+  PendingPromise,
+  registerPendingPromise,
+} from '../../../utils/messaging';
 
 import {
   consumeMessage,
@@ -38,12 +42,6 @@ const MAX_MESSAGE_WAIT =
       // like a reasonable compromise.
       2147483647
     : 1000 * 60 * MINUTES; // 10 minutes
-
-interface PendingPromise {
-  promise: Promise<unknown>;
-  resolver: (result: any) => void;
-  rejector: (err: any) => void;
-}
 
 type NxPluginWorkerCache = Map<string, Promise<LoadedNxPlugin>>;
 
@@ -113,6 +111,10 @@ export async function loadRemoteNxPlugin(
   return [pluginPromise, cleanupFunction];
 }
 
+const getTimeoutErrorText =
+  (context: { plugin: string; operation: string }) => (): string =>
+    `${context.plugin} timed out after ${MINUTES} minutes during ${context.operation}. ${PLUGIN_TIMEOUT_HINT_TEXT}`;
+
 /**
  * Creates a message handler for the given worker.
  * @param worker Instance of plugin-worker
@@ -163,10 +165,11 @@ function createWorkerHandler(
                           payload: { configFiles, context: ctx, tx },
                         });
                       },
-                      {
+                      getTimeoutErrorText({
                         plugin: pluginName,
                         operation: 'createNodes',
-                      }
+                      }),
+                      MAX_MESSAGE_WAIT
                     );
                   },
                 ]
@@ -184,10 +187,11 @@ function createWorkerHandler(
                         payload: { context: ctx, tx },
                       });
                     },
-                    {
+                    getTimeoutErrorText({
                       plugin: pluginName,
                       operation: 'createDependencies',
-                    }
+                    }),
+                    MAX_MESSAGE_WAIT
                   );
                 }
               : undefined,
@@ -204,10 +208,11 @@ function createWorkerHandler(
                         payload: { graph, context: ctx, tx },
                       });
                     },
-                    {
+                    getTimeoutErrorText({
                       plugin: pluginName,
                       operation: 'createMetadata',
-                    }
+                    }),
+                    MAX_MESSAGE_WAIT
                   );
                 }
               : undefined,
@@ -259,46 +264,6 @@ function createWorkerExitHandler(
       );
     }
   };
-}
-
-function registerPendingPromise(
-  tx: string,
-  pending: Map<string, PendingPromise>,
-  callback: () => void,
-  context: {
-    plugin: string;
-    operation: string;
-  }
-): Promise<any> {
-  let resolver: (x: unknown) => void,
-    rejector: (e: Error | unknown) => void,
-    timeout: NodeJS.Timeout;
-
-  const promise = new Promise((res, rej) => {
-    rejector = rej;
-    resolver = res;
-
-    timeout = setTimeout(() => {
-      rej(
-        new Error(
-          `${context.plugin} timed out after ${MINUTES} minutes during ${context.operation}. ${PLUGIN_TIMEOUT_HINT_TEXT}`
-        )
-      );
-    }, MAX_MESSAGE_WAIT);
-
-    callback();
-  }).finally(() => {
-    pending.delete(tx);
-    if (timeout) clearTimeout(timeout);
-  });
-
-  pending.set(tx, {
-    promise,
-    resolver,
-    rejector,
-  });
-
-  return promise;
 }
 
 global.nxPluginWorkerCount ??= 0;
