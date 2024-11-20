@@ -703,6 +703,7 @@ describe('Linter', () => {
       expect(e2eOverrides).toContain('plugin:@nx/javascript');
 
       runCLI(`generate @nx/js:lib libs/${mylib} --unitTestRunner=jest`);
+      runCLI('reset', { env: { CI: 'false' } });
       verifySuccessfulMigratedSetup(myapp, mylib);
 
       appEslint = readJson(`.eslintrc.json`);
@@ -737,6 +738,7 @@ describe('Linter', () => {
       expect(e2eOverrides).toContain('plugin:@nx/javascript');
 
       runCLI(`generate @nx/js:lib libs/${mylib} --no-interactive`);
+      runCLI('reset', { env: { CI: 'false' } });
       verifySuccessfulMigratedSetup(myapp, mylib);
 
       appEslint = readJson(`.eslintrc.json`);
@@ -771,6 +773,7 @@ describe('Linter', () => {
       expect(e2eOverrides).toContain('plugin:@nx/typescript');
 
       runCLI(`generate @nx/js:lib libs/${mylib} --no-interactive`);
+      runCLI('reset', { env: { CI: 'false' } });
       verifySuccessfulMigratedSetup(myapp, mylib);
 
       appEslint = readJson(`.eslintrc.json`);
