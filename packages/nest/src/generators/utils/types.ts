@@ -25,7 +25,6 @@ export type TransportLayer =
 
 export type NestGeneratorOptions = {
   path: string;
-  name?: string;
   skipFormat?: boolean;
 };
 
@@ -44,11 +43,11 @@ export type NestGeneratorWithResourceOption = NestGeneratorOptions & {
 
 export type NormalizedOptions = {
   name: string;
+  path: string;
   sourceRoot: string;
   flat?: boolean;
   language?: 'js' | 'ts';
   module?: string;
-  path?: string;
   skipFormat?: boolean;
   skipImport?: boolean;
   spec?: boolean;

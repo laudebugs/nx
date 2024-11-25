@@ -12,16 +12,19 @@ export async function normalizeOptions(
 ): Promise<NormalizedOptions> {
   const { directory, fileName } =
     await determineArtifactNameAndDirectoryOptions(tree, {
-      name: options.name,
       path: options.path,
     });
 
   return {
     ...options,
-    flat: true,
     name: fileName,
+    // the nestjs schematics append the `path` to the `sourceRoot`, so we set
+    // `sourceRoot` to an empty string and the `path` to the fully normalized
+    // artifact path
+    path: directory,
+    sourceRoot: '',
+    flat: true,
     skipFormat: options.skipFormat,
-    sourceRoot: directory,
   };
 }
 

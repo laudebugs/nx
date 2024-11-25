@@ -9,7 +9,8 @@ describe('runNestSchematic utility', () => {
   const directory = 'api';
   const options: NormalizedOptions = {
     name: 'test',
-    sourceRoot: `apps/${directory}/src`,
+    path: `apps/${directory}/src`,
+    sourceRoot: '',
     spec: true,
   };
 
