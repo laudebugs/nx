@@ -1,4 +1,6 @@
 import { existsSync } from 'fs';
+import * as createSpinner from 'ora';
+
 import { PackageJson } from '../../utils/package-json';
 import { prerelease } from 'semver';
 import { output } from '../../utils/output';
@@ -20,7 +22,6 @@ import {
   updateGitIgnore,
 } from './implementation/utils';
 import { prompt } from 'enquirer';
-import { execSync } from 'child_process';
 import { addNxToAngularCliRepo } from './implementation/angular';
 import { globWithWorkspaceContextSync } from '../../utils/workspace-context';
 import { connectExistingRepoToNxCloudPrompt } from '../connect/connect-to-nx-cloud';
@@ -28,41 +29,95 @@ import { addNxToNpmRepo } from './implementation/add-nx-to-npm-repo';
 import { addNxToMonorepo } from './implementation/add-nx-to-monorepo';
 import { NxJsonConfiguration, readNxJson } from '../../config/nx-json';
 import { getPackageNameFromImportPath } from '../../utils/get-package-name-from-import-path';
+import { flushChanges, FsTree } from '../../generators/tree';
+import {
+  Generator as NxGenerator,
+  GeneratorCallback,
+} from '../../config/misc-interfaces';
+import { getGeneratorInformation } from '../generate/generator-utils';
 
 export interface InitArgs {
   interactive: boolean;
   nxCloud?: boolean;
   useDotNxInstallation?: boolean;
   integrated?: boolean; // For Angular projects only
+  verbose?: boolean;
 }
 
-export function installPlugins(
+export function runPackageManagerInstallPlugins(
   repoRoot: string,
-  plugins: string[],
-  pmc: PackageManagerCommands,
-  updatePackageScripts: boolean
+  pmc: PackageManagerCommands = getPackageManagerCommand(),
+  plugins: string[]
 ) {
   if (plugins.length === 0) {
     return;
   }
-
   addDepsToPackageJson(repoRoot, plugins);
-
   runInstall(repoRoot, pmc);
+}
 
-  output.log({ title: '🔨 Configuring plugins' });
-  for (const plugin of plugins) {
-    execSync(
-      `${pmc.exec} nx g ${plugin}:init --keepExistingVersions ${
-        updatePackageScripts ? '--updatePackageScripts' : ''
-      }`,
-      {
-        stdio: [0, 1, 2],
-        cwd: repoRoot,
-        windowsHide: false,
-      }
-    );
+/**
+ * Install plugins
+ * Get the implementation of the plugin's init generator and run it
+ */
+export async function installPlugins(
+  repoRoot: string,
+  plugins: string[],
+  updatePackageScripts: boolean,
+  verbose: boolean = false
+): Promise<{
+  succeededPlugins: string[];
+  failedPlugins: { [plugin: string]: Error };
+}> {
+  if (plugins.length === 0) {
+    return {
+      succeededPlugins: [],
+      failedPlugins: {},
+    };
   }
+  output.log({ title: '🔨 Configuring plugins' });
+  const spinner = createSpinner();
+  let succeededPlugins = [];
+  const failedPlugins: {
+    [pluginName: string]: Error;
+  } = {};
+  const host = new FsTree(
+    repoRoot,
+    verbose,
+    `install plugins ${plugins.join(' ')}`
+  );
+  for (const plugin of plugins) {
+    spinner.start('Installing plugin ' + plugin);
+    try {
+      const { implementationFactory } = getGeneratorInformation(
+        plugin,
+        'init',
+        repoRoot,
+        {}
+      );
+      const implementation: NxGenerator = implementationFactory();
+      const task: GeneratorCallback | void = await implementation(host, {
+        keepExistingVersions: true,
+        updatePackageScripts,
+      });
+      if (task) {
+        await task();
+      }
+      succeededPlugins.push(plugin);
+      spinner.succeed('Installed plugin ' + plugin);
+    } catch (e) {
+      failedPlugins[plugin] = e;
+      spinner.fail('Failed to install plugin ' + plugin);
+    }
+  }
+  host.lock();
+  const changes = host.listChanges();
+  flushChanges(repoRoot, changes);
+
+  return {
+    succeededPlugins,
+    failedPlugins,
+  };
 }
 
 export async function initHandler(options: InitArgs): Promise<void> {
@@ -146,7 +201,13 @@ export async function initHandler(options: InitArgs): Promise<void> {
 
   output.log({ title: '📦 Installing Nx' });
 
-  installPlugins(repoRoot, plugins, pmc, updatePackageScripts);
+  runPackageManagerInstallPlugins(repoRoot, pmc, plugins);
+  await installPlugins(
+    repoRoot,
+    plugins,
+    updatePackageScripts,
+    options.verbose
+  );
 
   if (useNxCloud) {
     output.log({ title: '🛠️ Setting up Nx Cloud' });

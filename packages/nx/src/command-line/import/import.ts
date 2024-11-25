@@ -9,7 +9,10 @@ import { tmpdir } from 'tmp';
 import { prompt } from 'enquirer';
 import { output } from '../../utils/output';
 import * as createSpinner from 'ora';
-import { detectPlugins, installPlugins } from '../init/init-v2';
+import {
+  detectPlugins,
+  runPackageManagerInstallPlugins,
+} from '../init/init-v2';
 import { readNxJson } from '../../config/nx-json';
 import { workspaceRoot } from '../../utils/workspace-root';
 import {
@@ -33,6 +36,7 @@ import {
   checkCompatibleWithPlugins,
   updatePluginsInNxJson,
 } from './utils/check-compatible-with-plugins';
+import { configurePlugins } from './utils/configure-plugins';
 
 const importRemoteName = '__tmp_nx_import__';
 
@@ -64,7 +68,7 @@ export interface ImportOptions {
 
 export async function importHandler(options: ImportOptions) {
   process.env.NX_RUNNING_NX_IMPORT = 'true';
-  let { sourceRepository, ref, source, destination } = options;
+  let { sourceRepository, ref, source, destination, verbose } = options;
   const destinationGitClient = new GitRepository(process.cwd());
 
   if (await destinationGitClient.hasUncommittedChanges()) {
@@ -284,62 +288,41 @@ export async function importHandler(options: ImportOptions) {
     });
   }
 
-  // If install fails, we should continue since the errors could be resolved later.
-  let installFailed = false;
   if (nxJson.plugins?.length > 0) {
     // Check compatibility with existing plugins for the workspace included new imported projects
-    const imcompatiblePlugins = await checkCompatibleWithPlugins(
+    const incompatiblePlugins = await checkCompatibleWithPlugins(
       nxJson.plugins,
+      workspaceRoot,
       workspaceRoot
     );
-    if (Object.keys(imcompatiblePlugins).length > 0) {
-      updatePluginsInNxJson(workspaceRoot, imcompatiblePlugins);
+    if (Object.keys(incompatiblePlugins).length > 0) {
+      updatePluginsInNxJson(workspaceRoot, incompatiblePlugins);
       await destinationGitClient.amendCommit();
     }
   }
-  if (plugins.length > 0) {
-    try {
-      output.log({ title: 'Installing Plugins' });
-      installPlugins(workspaceRoot, plugins, pmc, updatePackageScripts);
 
-      await destinationGitClient.amendCommit();
-    } catch (e) {
-      installFailed = true;
-      output.error({
-        title: `Install failed: ${e.message || 'Unknown error'}`,
-        bodyLines: [e.stack],
-      });
-    }
-    // Check compatibility with new plugins for the workspace included new imported projects
-    const imcompatiblePlugins = await checkCompatibleWithPlugins(
-      plugins.map((plugin) => plugin + '/plugin'), // plugins contains package name, but we need plugin name
-      workspaceRoot
+  const installed = await runInstallDestinationRepo(
+    plugins,
+    pmc,
+    packageManager,
+    originalPackageWorkspaces,
+    destinationGitClient
+  );
+
+  if (installed && plugins.length > 0) {
+    await configurePlugins(
+      workspaceRoot,
+      plugins,
+      updatePackageScripts,
+      pmc,
+      destinationGitClient,
+      verbose
     );
-    if (Object.keys(imcompatiblePlugins).length > 0) {
-      updatePluginsInNxJson(workspaceRoot, imcompatiblePlugins);
-      await destinationGitClient.amendCommit();
-    }
-  } else if (await needsInstall(packageManager, originalPackageWorkspaces)) {
-    try {
-      output.log({
-        title: 'Installing dependencies for imported code',
-      });
-
-      runInstall(workspaceRoot, getPackageManagerCommand(packageManager));
-
-      await destinationGitClient.amendCommit();
-    } catch (e) {
-      installFailed = true;
-      output.error({
-        title: `Install failed: ${e.message || 'Unknown error'}`,
-        bodyLines: [e.stack],
-      });
-    }
   }
 
   console.log(await destinationGitClient.showStat());
 
-  if (installFailed) {
+  if (installed === false) {
     const pmc = getPackageManagerCommand(packageManager);
     output.warn({
       title: `The import was successful, but the install failed`,
@@ -347,6 +330,19 @@ export async function importHandler(options: ImportOptions) {
         `You may need to run "${pmc.install}" manually to resolve the issue. The error is logged above.`,
       ],
     });
+    if (plugins.length > 0) {
+      output.warn({
+        title: `Failed to install plugins`,
+        bodyLines: [
+          'The following plugins were not installed:',
+          ...Object.keys(plugins).map((p) => `- ${chalk.bold(p)}`),
+          'You may need to run commands manually to install plugins:',
+          ...Object.keys(plugins).map(
+            (p) => `- ${chalk.bold(pmc.exec + ' nx add ' + p)}`
+          ),
+        ],
+      });
+    }
   }
 
   await warnOnMissingWorkspacesEntry(packageManager, pmc, relativeDestination);
@@ -413,6 +409,53 @@ async function createTemporaryRemote(
   } catch {}
   await destinationGitClient.addGitRemote(remoteName, sourceRemoteUrl);
   await destinationGitClient.fetch(remoteName);
+}
+
+/**
+ * Run install for the imported code and plugins
+ * @returns true if the install failed
+ */
+async function runInstallDestinationRepo(
+  plugins: string[],
+  pmc: PackageManagerCommands,
+  packageManager: PackageManager,
+  originalPackageWorkspaces: Set<string>,
+  destinationGitClient: GitRepository
+): Promise<boolean> {
+  // If install fails, we should continue since the errors could be resolved later.
+  let installed = true;
+  if (plugins.length > 0) {
+    output.log({ title: 'Installing Plugins' });
+    try {
+      runPackageManagerInstallPlugins(workspaceRoot, pmc, plugins);
+      await destinationGitClient.amendCommit();
+    } catch (e) {
+      installed = false;
+      output.error({
+        title: `Install failed: ${e.message || 'Unknown error'}`,
+        bodyLines: [
+          'The following plugins were not installed:',
+          ...plugins.map((p) => `- ${p}`),
+          e.stack,
+        ],
+      });
+    }
+  } else if (await needsInstall(packageManager, originalPackageWorkspaces)) {
+    try {
+      output.log({
+        title: 'Installing dependencies for imported code',
+      });
+      runInstall(workspaceRoot, getPackageManagerCommand(packageManager));
+      await destinationGitClient.amendCommit();
+    } catch (e) {
+      installed = false;
+      output.error({
+        title: `Install failed: ${e.message || 'Unknown error'}`,
+        bodyLines: [e.stack],
+      });
+    }
+  }
+  return installed;
 }
 
 // If the user imports a project that isn't in NPM/Yarn/PNPM workspaces, then its dependencies

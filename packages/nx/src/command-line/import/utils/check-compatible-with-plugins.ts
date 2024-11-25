@@ -14,10 +14,8 @@ import {
   loadNxPlugins,
 } from '../../../project-graph/plugins/internal-api';
 import {
-  AggregateCreateNodesError,
   isAggregateCreateNodesError,
   isMergeNodesError,
-  MergeNodesError,
   ProjectConfigurationsError,
 } from '../../../project-graph/error-types';
 import { workspaceRoot } from '../../../utils/workspace-root';
@@ -47,7 +45,7 @@ export async function checkCompatibleWithPlugins(
   let pluginNametoExcludeFiles: {
     [pluginName: string]: Set<string>;
   } = {};
-  const nxJson = readNxJson(workspaceRoot);
+  const nxJson = readNxJson(root);
   try {
     await retrieveProjectConfigurations(
       nxPlugins,
