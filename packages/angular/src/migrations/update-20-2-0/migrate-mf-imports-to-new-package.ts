@@ -17,7 +17,7 @@ export default async function migrateMfImportsToNewPackage(tree: Tree) {
       (dep) => dep.target === 'npm:@nx/webpack'
     );
     if (usesNxWebpack) {
-      if (graph.externalNodes[project]) {
+      if (!graph.nodes[project]) {
         continue;
       }
       const root = graph.nodes[project].data.root;
